@@ -1,0 +1,22 @@
+torch==2.1.0  # required to install audiocraft
+librosa
+tqdm
+flake8
+black
+tiktoken==0.5.1
+audiocraft
+numpy
+ninja
+fastapi
+uvicorn
+tyro
+deepfilternet
+pydub
+gradio
+huggingface_hub
+azure-core==1.29.7
+azure-identity==1.15.0
+azure-storage-blob==12.19.0
+azure-storage-queue==12.9.0
+nltk
+attr
