@@ -1,5 +1,4 @@
 .venv/
-.data/
 .log/
 .pytest_cache
 .vscode
@@ -10,6 +9,7 @@ dev/
 checkpoints/
 text/
 fam.egg-info
+.vscode
 
 .env
 application.log

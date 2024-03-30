@@ -24,7 +24,6 @@ RUN chmod 777 outputs
 COPY requirements.txt requirements.txt
 
 
-RUN pip install --no-cache-dir packaging wheel torch
 RUN pip install --no-cache-dir audiocraft  # HACK: installation fails within the requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir --upgrade torch torchaudio
@@ -32,5 +31,4 @@ RUN pip install --no-cache-dir --upgrade torch torchaudio
 COPY . .
 
 RUN pip install --no-cache-dir -e .
-# ENTRYPOINT ["python3.10", "fast.py"]
-CMD ["uvicorn", "fast:app", "--host", "::", "--port", "80"]
+ENTRYPOINT ["python3.10", "fast.py"]
