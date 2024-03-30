@@ -11,7 +11,7 @@ from typing import Optional
 import torch
 import os
 import datetime
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, BackgroundTasks
 import fastapi.middleware.cors
 import tyro
 import uvicorn
@@ -91,9 +91,9 @@ def inference(connection_string: str, input_container_name: str, output_containe
     with open(f"{text_dir}/{text_file}", "r") as f:
         text = f.read()
     # download reference voice
+    voice_local_path = f'{voice_dir}/{reference_voice}'
     if reference_voice not in os.listdir(voice_dir):
         voice = retrieve_file(voices_blob, reference_voice).download_blob()
-        voice_local_path = f'{voice_dir}/{reference_voice}'
         with open(f"{voice_local_path}", "wb") as f:
             voice.readinto(f)
 
@@ -110,7 +110,7 @@ def inference(connection_string: str, input_container_name: str, output_containe
         if wav_path is None:
             warnings.warn("Running without speaker reference")
             assert tts_req.guidance is None
-        if len(tts_req.text.split()) >10:
+        if len(tts_req.text.split()) > 10:
             sentences = split_into_sentences(tts_req.text)
             list_of_wav_out = []
             for sentence in sentences: 
@@ -121,7 +121,7 @@ def inference(connection_string: str, input_container_name: str, output_containe
                     guidance_scale=tts_req.guidance,
                 )
                 list_of_wav_out.append(wav_out_path)
-            wav_out_path = "." + text_file.name.split(".")[1] + "_" + reference_voice.split(".")[0] + "_meta" + ".wav"
+            wav_out_path = "." + text_file.split(".")[1] + "_" + reference_voice.split(".")[0] + "_meta" + ".wav"
             combine_wav_files(list_of_wav_out, wav_out_path)
         else: 
             wav_out_path = GlobalState.tts.synthesise(
@@ -132,12 +132,13 @@ def inference(connection_string: str, input_container_name: str, output_containe
             )
     # save result to azure
     end_time = datetime.datetime.now()
-    output_blob_client = result_blob.get_blob_client(wav_out_path)
+    result_file_name = text_file.split(".")[0] + "_" + reference_voice.split(".")[0] + "_meta" + ".wav"
+    output_blob_client = result_blob.get_blob_client(result_file_name)
     # upload wav file from local path to blob
     with open(wav_out_path, "rb") as bytes_data:
         output_blob_client.upload_blob(bytes_data, overwrite=True)
 
-    return {"status": "success", "result saved to": f"{output_container_name}/{wav_out_path}", "processing time": str(end_time - process_start_time)}
+    return {"status": "success", "result saved to": f"{output_container_name}/{result_file_name}", "processing time": str(end_time - process_start_time)}
 
 
 @dataclass
@@ -163,8 +164,8 @@ class _GlobalState:
 
 GlobalState = _GlobalState()
 
-GlobalState.config = tyro.cli(ServingConfig)
-GlobalState.tts = TTS(seed=GlobalState.config.seed)
+# GlobalState.config = tyro.cli(ServingConfig)
+# GlobalState.tts = TTS(seed=GlobalState.config.seed)
 
 @dataclass(frozen=True)
 class TTSRequest:
@@ -180,7 +181,7 @@ async def health_check():
     return {"status": "ok"}
 
 
-@app.post("/process")
+@app.post("/process_short_text")
 async def process(
     connection_string: str = Query("DefaultEndpointsProtocol=https;AccountName=accountname;AccountKey=key;EndpointSuffix=core.windows.net", description="Azure Storage Connection String"),
     input_container_name: str = Query("requests", description="Container name for input files"),
@@ -191,6 +192,19 @@ async def process(
 ):
     result = inference(connection_string, input_container_name, output_container_name, voices_container_name, reference_voice, text_file)
     return result
+
+@app.post("/process_long_text")
+async def process_long(
+    background_tasks: BackgroundTasks,
+    connection_string: str = Query("DefaultEndpointsProtocol=https;AccountName=accountname;AccountKey=key;EndpointSuffix=core.windows.net", description="Azure Storage Connection String"),
+    input_container_name: str = Query("requests", description="Container name for input files"),
+    output_container_name: str = Query("results", description="Container name for output files"),
+    voices_container_name: Optional[str] = Query("voices", description="Container name for voice files"),
+    reference_voice: Optional[str] = Query(None, description="Voice file to be used as reference"),
+    text_file: str = Query(description="Text file to be used for TTS"),
+):
+    background_tasks.add_task(inference, connection_string, input_container_name, output_container_name, voices_container_name, reference_voice, text_file)
+    return {"status": "Process started"}
 
 
 @app.post("/tts", response_class=Response)
@@ -262,14 +276,14 @@ if __name__ == "__main__":
 
     app.add_middleware(
         fastapi.middleware.cors.CORSMiddleware,
-        allow_origins=["*", f"http://localhost:{GlobalState.config.port}", "http://localhost:3000"],
+        allow_origins=["*", f"http://localhost:{GlobalState.config.port}", "http://localhost:80"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="::",
         port=GlobalState.config.port,
         log_level="info",
     )
