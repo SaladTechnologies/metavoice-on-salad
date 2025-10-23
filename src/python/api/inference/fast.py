@@ -91,11 +91,13 @@ def inference(connection_string: str, input_container_name: str, output_containe
     with open(f"{text_dir}/{text_file}", "r") as f:
         text = f.read()
     # download reference voice
-    voice_local_path = f'{voice_dir}/{reference_voice}'
-    if reference_voice not in os.listdir(voice_dir):
-        voice = retrieve_file(voices_blob, reference_voice).download_blob()
-        with open(f"{voice_local_path}", "wb") as f:
-            voice.readinto(f)
+    voice_local_path: Optional[str] = None
+    if reference_voice:
+        voice_local_path = f"{voice_dir}/{reference_voice}"
+        if reference_voice not in os.listdir(voice_dir):
+            voice = retrieve_file(voices_blob, reference_voice).download_blob()
+            with open(voice_local_path, "wb") as f:
+                voice.readinto(f)
 
     # TTS process: 
     
